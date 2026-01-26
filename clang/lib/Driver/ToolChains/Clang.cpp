@@ -797,6 +797,20 @@ static bool maybeHasClangPchSignature(const Driver &D, StringRef Path) {
   return !Obj.takeError();
 }
 
+/// Is -Ofast used?
+static bool isOFastUsed(const ArgList &Args) {
+  if (Arg *A = Args.getLastArg(options::OPT_O_Group))
+    if (A->getOption().matches(options::OPT_Ofast))
+      return true;
+  return false;
+}
+
+/// Is -fopenmp-target-fast or -Ofast used
+static bool isTargetFastUsed(const ArgList &Args) {
+  return Args.hasFlag(options::OPT_fopenmp_target_fast,
+                      options::OPT_fno_openmp_target_fast, isOFastUsed(Args));
+}
+
 static bool gchProbe(const Driver &D, StringRef Path) {
   llvm::ErrorOr<llvm::vfs::Status> Status = D.getVFS().status(Path);
   if (!Status)
@@ -6725,10 +6739,33 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        options::OPT_fno_openmp_assume_threads_oversubscription,
                        /*Default=*/false))
         CmdArgs.push_back("-fopenmp-assume-threads-oversubscription");
-      if (Args.hasArg(options::OPT_fopenmp_assume_no_thread_state))
+
+      if (isTargetFastUsed(Args))
+        CmdArgs.push_back("-fopenmp-target-fast");
+      else
+        CmdArgs.push_back("-fno-openmp-target-fast");
+
+      if (Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
+                       options::OPT_fno_openmp_target_ignore_env_vars,
+                       isTargetFastUsed(Args)))
+        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
+      else
+        CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
+
+      if (Args.hasFlag(options::OPT_fopenmp_assume_no_thread_state,
+                       options::OPT_fno_openmp_assume_no_thread_state,
+                       isTargetFastUsed(Args)))
         CmdArgs.push_back("-fopenmp-assume-no-thread-state");
-      if (Args.hasArg(options::OPT_fopenmp_assume_no_nested_parallelism))
+      else
+        CmdArgs.push_back("-fno-openmp-assume-no-thread-state");
+
+      if (Args.hasFlag(options::OPT_fopenmp_assume_no_nested_parallelism,
+                       options::OPT_fno_openmp_assume_no_nested_parallelism,
+                       isTargetFastUsed(Args)))
         CmdArgs.push_back("-fopenmp-assume-no-nested-parallelism");
+      else
+        CmdArgs.push_back("-fno-openmp-assume-no-nested-parallelism");
+
       if (Args.hasArg(options::OPT_fopenmp_offload_mandatory))
         CmdArgs.push_back("-fopenmp-offload-mandatory");
       if (Args.hasArg(options::OPT_fopenmp_force_usm))
